@@ -39,7 +39,8 @@ let state = {
   currentInspectionId: null,
   importDraft: [],
   reportId: null,
-  monthFilter: new Date().toISOString().slice(0, 7)
+  monthFilter: new Date().toISOString().slice(0, 7),
+  editingProjectId: null
 };
 
 const db = {
@@ -115,8 +116,9 @@ function topbar() {
     "project-library":"工程库",library:"历史通报库",standards:"规范库",settings:"设置"};
   const backs = {"inspection-detail":"inspections",review:"inspection-detail",notice:"review",
     "project-library":"me",library:"me",standards:"me",settings:"me"};
+  const editableTitle = state.view === "inspection-detail" ? `button data-action="edit-project" aria-label="修改工程资料"` : "div";
   return `<header class="topbar">${backs[state.view] ? `<button class="top-back" data-view="${backs[state.view]}">‹</button>` : `<span class="top-side"></span>`}
-    <div class="top-title">${esc(titles[state.view] || "水利监督检查")}</div>
+    <${editableTitle} class="top-title">${esc(titles[state.view] || "水利监督检查")}</${editableTitle.split(" ")[0]}>
     <button class="top-search" data-action="open-search" aria-label="搜索">⌕</button></header>`;
 }
 
@@ -124,8 +126,7 @@ function homeView() { return inspectionsView(); }
 
 function inspectionCard(item) {
   const photoCount = item.records.reduce((n, r) => n + r.photos.length, 0);
-  return `<div class="swipe-row" data-swipe-id="${item.id}"><button class="swipe-delete" data-delete-inspection="${item.id}">删除</button>
-    <button class="wx-cell inspection-cell swipe-content" data-open-inspection="${item.id}">
+  return `<div class="inspection-row"><button class="wx-cell inspection-cell" data-open-inspection="${item.id}">
     <span class="wx-avatar">工</span><span class="grow"><h3>${esc(item.projectName)}</h3>
     <p>${esc(item.date)} · ${photoCount}张照片 · ${item.records.length}条记录</p></span>
     <span class="cell-status">${esc(item.status)}</span><span class="chevron">›</span></button></div>`;
@@ -147,9 +148,8 @@ function projectSlide(item) {
   const cover = photos[photos.length - 1];
   const style = cover ? `style="background-image:linear-gradient(0deg,rgba(0,0,0,.82),rgba(0,0,0,.05) 55%),url('${cover}')"`
     : `style="background-image:linear-gradient(145deg,#29313c,#111 68%)"`;
-  return `<div class="swipe-row project-slide-row" data-swipe-id="${item.id}">
-    <button class="swipe-delete" data-delete-inspection="${item.id}">删除</button>
-    <button class="project-slide swipe-content" data-open-inspection="${item.id}" ${style}>
+  return `<div class="project-slide-row">
+    <button class="project-slide" data-open-inspection="${item.id}" ${style}>
       <span class="slide-state">${esc(item.status)}</span>
       <span class="slide-info"><b>${esc(item.projectName)}</b><small>${esc(item.date)} · ${item.records.length}个问题 · ${photos.length}张照片</small></span>
       ${cover ? "" : `<span class="no-cover">暂无现场照片</span>`}
@@ -194,8 +194,8 @@ function menuCell(view, icon, label, value) {
 }
 
 function meView() {
-  return `<main class="page wx-page"><div class="profile-cell"><span class="profile-avatar">水</span>
-    <div><h2>水利监督检查</h2><p>现场记录与通报整理</p></div></div>
+  return `<main class="page wx-page"><div class="profile-cell"><img class="profile-logo" src="./icons/app-icon-192.png" alt="娄底水利">
+    <div><h2>娄底水利</h2><p>现场检查与通报整理</p></div></div>
     <div class="wx-group menu-group">${menuCell("project-library","▦","工程库",`${state.projectLibrary.length}个`)}
       ${menuCell("library","▤","历史通报库",`${state.library.length}条`)}${menuCell("standards","§","规范库",`${state.standards.length}份`)}</div>
     <div class="wx-group menu-group">${menuCell("settings","⚙","设置","")}</div></main>`;
@@ -244,7 +244,20 @@ function inspectionDetailView() {
     <button class="wx-primary" data-action="add-record">＋ 添加问题</button>
     ${item.records.length ? `<button class="wx-secondary" data-action="auto-draft">自动整理并生成初稿</button>` : ""}
     ${item.issues?.length ? `<button class="wx-secondary" data-action="review-draft">查看已生成初稿</button>` : ""}
+    <button class="wx-danger" data-action="delete-inspection">删除本次检查</button>
   </main>`;
+}
+
+function speechControl(targetId) {
+  return `<button type="button" class="speech-btn" data-speech-target="${targetId}" aria-label="语音输入">语音</button>`;
+}
+
+function noticeCategoryOptions(issue) {
+  const quality = ["主要岗位责任制落实及人员到位履职情况", "质量行为检查情况", "实体工程质量情况", "质量其他"];
+  const safety = ["安全体系运行情况", "施工现场管理及安全隐患情况", "防洪度汛及应急预案情况", "安全其他"];
+  const options = issue.type === "安全" ? safety : quality;
+  const selected = issue.noticeCategory || classifyNoticeCategory(issue.type, `${issue.title}${issue.fact}`);
+  return options.map(value => `<option value="${value}" ${value === selected ? "selected" : ""}>${value}</option>`).join("");
 }
 
 function responsibilityPicker(item, issue) {
@@ -277,9 +290,10 @@ function reviewView() {
             <div class="field"><label>问题类型</label><select name="type">${["质量","安全","其他"].map(v => `<option ${v===issue.type?"selected":""}>${v}</option>`).join("")}</select></div>
             <div class="field"><label>问题等级</label><select name="level">${["一般","较重","严重"].map(v => `<option ${v===issue.level?"selected":""}>${v}</option>`).join("")}</select></div>
           </div>
+          <div class="field"><label>通知单归类</label><select name="noticeCategory">${noticeCategoryOptions(issue)}</select></div>
           <div class="field"><label>责任单位（可多选）</label>${responsibilityPicker(item, issue)}</div>
-          <div class="field"><label>“经查”正式表述</label><textarea name="fact">${esc(issue.fact)}</textarea></div>
-          <div class="field"><label>推荐规范条文</label><textarea name="standard">${esc(issue.standard)}</textarea><p class="help">正式发布前须对照规范库原文核验。</p></div>
+          <div class="field"><label>“经查”正式表述</label><div class="speech-field"><textarea id="fact-${issue.id}" name="fact">${esc(issue.fact)}</textarea>${speechControl(`fact-${issue.id}`)}</div></div>
+          <div class="field"><label>推荐规范条文</label><textarea name="standard">${esc(issue.standard)}</textarea><p class="help">${issue.standardSource ? `匹配来源：${esc(issue.standardSource)}。` : ""}正式发布前须对照规范库原文核验。</p></div>
           <div class="field"><label>整改要求</label><textarea name="rectification">${esc(issue.rectification)}</textarea></div>
           <div class="photo-grid">${issue.photos.map(src => `<div class="photo-tile"><img src="${src}" alt="问题照片"></div>`).join("")}</div>
         </article>`).join("")}
@@ -387,24 +401,29 @@ function modalMarkup() {
       <button class="wx-primary" data-action="new-project">＋ 新增工程</button></section></div>`;
   }
   if (state.modal === "project-form") {
-    return `<div class="modal page-modal"><section class="sheet"><div class="sheet-head"><button class="page-back" data-action="close-modal">‹</button><h2>新增工程</h2><span></span></div>
+    const project = state.projectLibrary.find(item => item.id === state.editingProjectId);
+    const current = inspection();
+    const editing = Boolean(project);
+    return `<div class="modal page-modal"><section class="sheet"><div class="sheet-head"><button class="page-back" data-action="close-modal">‹</button><h2>${editing ? "修改工程资料" : "新增工程"}</h2><span></span></div>
       <form id="new-form" class="form">
-        <div class="field"><label>工程名称 *</label><input class="input" name="projectName" required></div>
-        <div class="row"><div class="field"><label>检查日期 *</label><input class="input" type="date" name="date" value="${today()}" required></div>
-        <div class="field"><label>县市区</label><input class="input" name="district"></div></div>
+        <input type="hidden" name="editingProjectId" value="${esc(project?.id || "")}">
+        <div class="field"><label>工程名称 *</label><div class="speech-field"><input id="project-name" class="input" name="projectName" value="${esc(project?.name || "")}" required>${speechControl("project-name")}</div></div>
+        <div class="row"><div class="field"><label>检查日期 *</label><input class="input" type="date" name="date" value="${esc(current?.date || today())}" required></div>
+        <div class="field"><label>县市区</label><div class="speech-field"><input id="project-district" class="input" name="district" value="${esc(project?.district || "")}">${speechControl("project-district")}</div></div></div>
         <details><summary>参建单位信息</summary><div class="form details-form">
-          <div class="field"><label>项目法人 / 建设单位</label><input class="input" name="ownerUnit"></div>
-          <div class="field"><label>施工单位</label><input class="input" name="constructionUnit"></div>
-          <div class="field"><label>监理单位</label><input class="input" name="supervisionUnit"></div>
-          <div class="field"><label>勘察设计单位</label><input class="input" name="designUnit"></div>
-        </div></details><button class="wx-primary" type="submit">保存并开始检查</button>
+          <div class="field"><label>项目法人 / 建设单位</label><div class="speech-field"><input id="owner-unit" class="input" name="ownerUnit" value="${esc(project?.ownerUnit || "")}">${speechControl("owner-unit")}</div></div>
+          <div class="field"><label>施工单位</label><div class="speech-field"><input id="construction-unit" class="input" name="constructionUnit" value="${esc(project?.constructionUnit || "")}">${speechControl("construction-unit")}</div></div>
+          <div class="field"><label>监理单位</label><div class="speech-field"><input id="supervision-unit" class="input" name="supervisionUnit" value="${esc(project?.supervisionUnit || "")}">${speechControl("supervision-unit")}</div></div>
+          <div class="field"><label>勘察设计单位</label><div class="speech-field"><input id="design-unit" class="input" name="designUnit" value="${esc(project?.designUnit || "")}">${speechControl("design-unit")}</div></div>
+          <div class="field"><label>工程基本情况</label><div class="speech-field"><textarea id="basic-situation" name="basicSituation">${esc(project?.basicSituation || "")}</textarea>${speechControl("basic-situation")}</div></div>
+        </div></details><button class="wx-primary" type="submit">${editing ? "保存修改" : "保存并开始检查"}</button>
       </form></section></div>`;
   }
   if (state.modal === "record") {
     return `<div class="modal page-modal"><section class="sheet"><div class="sheet-head"><button class="page-back" data-action="close-modal">‹</button><h2>添加问题</h2><span></span></div>
       <div class="form"><div class="camera-box"><input id="photo-input" type="file" accept="image/*" capture="environment" multiple>
         <div class="camera">📷</div><b>拍照或从相册选择</b></div>
-        <div class="field"><label>简单备注</label><textarea id="record-remark" placeholder="例如：溢洪道右侧临边没有防护栏"></textarea></div>
+        <div class="field"><label>简单备注</label><div class="speech-field"><textarea id="record-remark" placeholder="例如：溢洪道右侧临边没有防护栏"></textarea>${speechControl("record-remark")}</div></div>
         <div id="pending-photos" class="photo-grid"></div>
         <button class="wx-primary" data-action="save-record">保存并继续添加</button>
         <button class="wx-secondary" data-action="save-record-finish">保存并返回工程</button>
@@ -451,10 +470,10 @@ function modalMarkup() {
         <div class="field"><label>本月检查说明</label><textarea name="intro" placeholder="如无特殊说明，App按工程数和问题数自动汇总"></textarea></div>
         <div class="field"><label>上期问题整改情况</label><textarea name="monthlyRectification" placeholder="请填写核实后的整改情况；留空则在通报中标记待补充"></textarea></div>
         <div class="row">
-          <div class="field"><label>联系人</label><input class="input" name="contactName" value="杨煦东"></div>
-          <div class="field"><label>联系电话</label><input class="input" name="contactPhone" value="18907384138"></div>
+          <div class="field"><label>联系人</label><input class="input" name="contactName" placeholder="请填写"></div>
+          <div class="field"><label>联系电话</label><input class="input" name="contactPhone" placeholder="请填写"></div>
         </div>
-        <div class="field"><label>邮箱</label><input class="input" name="email" value="1989195339@qq.com"></div>
+        <div class="field"><label>邮箱</label><input class="input" name="email" placeholder="请填写"></div>
         <button class="btn primary full" type="submit">生成并导出 Word 月通报</button>
       </form>
     </section></div>`;
@@ -477,12 +496,42 @@ function render() {
   if (state.view === "review") content = reviewView();
   if (state.view === "notice") content = noticeView();
   if (state.view === "report") content = reportView();
-  $("#app").innerHTML = `<div class="shell">${topbar()}${content}${nav()}</div>${modalMarkup()}`;
+  const shellClass = state.view === "inspections" ? "shell feed-shell" : "shell light-shell";
+  $("#app").innerHTML = `<div class="${shellClass}">${topbar()}${content}${nav()}</div>${modalMarkup()}`;
 }
 
 let pendingPhotos = [];
-let swipeState = null;
-let suppressSwipeClick = false;
+let activeRecognition = null;
+
+function startSpeechInput(targetId) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    target.focus();
+    toast("请点击 iPhone 键盘上的麦克风进行语音输入");
+    return;
+  }
+  activeRecognition?.stop?.();
+  const recognition = new SpeechRecognition();
+  activeRecognition = recognition;
+  recognition.lang = "zh-CN";
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  const original = target.value.trim();
+  recognition.onstart = () => toast("请开始说话…");
+  recognition.onresult = event => {
+    const text = [...event.results].map(result => result[0].transcript).join("");
+    target.value = original ? `${original}${/[，。；]$/.test(original) ? "" : "，"}${text}` : text;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  recognition.onerror = () => {
+    target.focus();
+    toast("未能启动语音识别，可使用 iPhone 键盘麦克风");
+  };
+  recognition.onend = () => { activeRecognition = null; };
+  recognition.start();
+}
 
 async function resizeImage(file) {
   const bitmap = await createImageBitmap(file);
@@ -546,9 +595,25 @@ function bestHistory(remark) {
 }
 
 function bestStandard(remark) {
-  return state.standards.flatMap(standard => standard.clauses.map(clause => ({
-    standard, clause, score: similarity(remark, clause)
-  }))).sort((a, b) => b.score - a.score)[0];
+  const keywords = remark.replace(/[，。；、：:（）()\s]/g, " ").split(/\s+/).filter(word => word.length >= 2);
+  return state.standards.flatMap(standard => standard.clauses.map(clause => {
+    const directHits = keywords.filter(word => clause.includes(word)).length;
+    const clauseNo = clause.match(/(?:第\s*)?\d+(?:\.\d+){1,3}(?:\s*条)?|第[一二三四五六七八九十百]+条/)?.[0] || "";
+    return { standard, clause, clauseNo, score: similarity(remark, clause) + directHits * .08 };
+  })).sort((a, b) => b.score - a.score)[0];
+}
+
+function classifyNoticeCategory(type, text) {
+  if (type === "安全") {
+    if (/应急|预案|度汛|防汛|演练|物资/.test(text)) return "防洪度汛及应急预案情况";
+    if (/体系|责任制|制度|人员|履职|到岗|安全费用/.test(text)) return "安全体系运行情况";
+    if (/临边|用电|配电|脚手架|基坑|起重|通道|消防|防护|安全帽|隐患/.test(text)) return "施工现场管理及安全隐患情况";
+    return "安全其他";
+  }
+  if (/履职|到岗|人员|责任制|项目经理|总监|质量责任/.test(text)) return "主要岗位责任制落实及人员到位履职情况";
+  if (/资料|记录|签字|检测|试验|评定|验收|工序|报验/.test(text)) return "质量行为检查情况";
+  if (/混凝土|钢筋|模板|裂缝|蜂窝|麻面|平整度|压实|渗漏|外观|实体|强度/.test(text)) return "实体工程质量情况";
+  return "质量其他";
 }
 
 function formalFact(remark) {
@@ -572,6 +637,12 @@ function generateIssues(item) {
     const standardMatch = bestStandard(`${record.remark}${useMatch ? match.item.title : ""}`);
     const type = useMatch ? match.item.type : guessType(record.remark);
     const title = useMatch ? match.item.title : guessTitle(record.remark);
+    const exactStandard = standardMatch?.score >= .12 && standardMatch.clauseNo;
+    const standardText = exactStandard
+      ? `《${standardMatch.standard.name}》${standardMatch.clause}`
+      : useMatch && /(?:第\s*\d+(?:\.\d+)*\s*条|表\s*\d+)/.test(match.item.standard || "")
+        ? match.item.standard
+        : "规范库暂无可直接核验的具体条文";
     return {
       id: uid(),
       title,
@@ -579,11 +650,12 @@ function generateIssues(item) {
       level: useMatch ? match.item.level : guessLevel(record.remark),
       responsibility: "",
       fact: useMatch && match.score > .34 ? adaptFact(match.item.fact, record.remark) : formalFact(record.remark),
-      standard: standardMatch?.score >= .08 ? `《${standardMatch.standard.name}》${standardMatch.clause}（待核验）`
-        : useMatch ? match.item.standard : `${type === "安全" ? "水利水电工程施工安全" : type === "质量" ? "水利水电工程施工质量检验与评定" : "工程建设管理"}相关规范条款（待核验）`,
+      standard: standardText,
+      standardSource: exactStandard ? standardMatch.standard.source : useMatch ? match.item.source : "",
       rectification: useMatch && match.item.rectification ? match.item.rectification : rectificationFor(type, title),
       photos: record.photos,
       confidence: useMatch ? Math.min(.96, .55 + match.score) : .42,
+      noticeCategory: classifyNoticeCategory(type, `${title}${record.remark}`),
       sourceRecordId: record.id
     };
   });
@@ -808,7 +880,7 @@ function directChildren(node, localName) {
   return [...node.children].filter(child => child.localName === localName);
 }
 
-function replaceCellLines(xml, cell, lines) {
+function replaceCellLines(xml, cell, lines, options = {}) {
   const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
   const paragraphs = directChildren(cell, "p");
   const templateParagraph = paragraphs[0];
@@ -819,6 +891,21 @@ function replaceCellLines(xml, cell, lines) {
     [...paragraph.children].filter(child => child.localName !== "pPr").forEach(child => child.remove());
     const run = templateRun ? templateRun.cloneNode(true) : xml.createElementNS(W, "w:r");
     [...run.children].filter(child => child.localName !== "rPr").forEach(child => child.remove());
+    if (options.kaitiFive) {
+      let rPr = directChildren(run, "rPr")[0];
+      if (!rPr) {
+        rPr = xml.createElementNS(W, "w:rPr");
+        run.insertBefore(rPr, run.firstChild);
+      }
+      let fonts = rPr.getElementsByTagNameNS(W, "rFonts")[0];
+      if (!fonts) { fonts = xml.createElementNS(W, "w:rFonts"); rPr.appendChild(fonts); }
+      ["ascii", "hAnsi", "eastAsia", "cs"].forEach(name => fonts.setAttributeNS(W, `w:${name}`, "楷体"));
+      ["sz", "szCs"].forEach(name => {
+        let size = rPr.getElementsByTagNameNS(W, name)[0];
+        if (!size) { size = xml.createElementNS(W, `w:${name}`); rPr.appendChild(size); }
+        size.setAttributeNS(W, "w:val", "21");
+      });
+    }
     const text = xml.createElementNS(W, "w:t");
     text.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
     text.textContent = line;
@@ -831,16 +918,6 @@ function replaceCellLines(xml, cell, lines) {
 function issueLine(issue, index) {
   const fact = issue.fact.replace(/^经查[，,]/, "").replace(/。$/, "");
   return `${index + 1}.${issue.title}：${fact}。`;
-}
-
-function categorizedNoticeLines(issues, patterns) {
-  const used = new Set();
-  const groups = patterns.map(regex => issues.filter((issue, index) => {
-    if (used.has(index) || !regex.test(`${issue.title}${issue.fact}`)) return false;
-    used.add(index); return true;
-  }));
-  groups.push(issues.filter((_, index) => !used.has(index)));
-  return groups.map(group => group.map(issue => issueLine(issue, issues.indexOf(issue))));
 }
 
 async function buildRectificationDocx(item) {
@@ -858,7 +935,7 @@ async function buildRectificationDocx(item) {
     const rows = directChildren(tables[tableIndex], "tr");
     return directChildren(rows[rowIndex], "tc")[cellIndex];
   };
-  const setCell = (t, r, c, value) => replaceCellLines(xml, tableCell(t, r, c), Array.isArray(value) ? value : [value || ""]);
+  const setCell = (t, r, c, value, options = {}) => replaceCellLines(xml, tableCell(t, r, c), Array.isArray(value) ? value : [value || ""], options);
   const identity = tableIndex => {
     setCell(tableIndex, 0, 1, item.projectName);
     setCell(tableIndex, 1, 1, item.ownerUnit);
@@ -876,17 +953,19 @@ async function buildRectificationDocx(item) {
   const quality = item.issues.filter(issue => issue.type === "质量");
   const safety = item.issues.filter(issue => issue.type === "安全");
   const others = item.issues.filter(issue => issue.type === "其他");
-  const qualityGroups = categorizedNoticeLines(quality, [/人员|履职|到岗|责任制/, /资料|检测|评定|验收/]);
-  setCell(0, 4, 1, qualityGroups[0]);
-  setCell(0, 6, 1, qualityGroups[1]);
-  setCell(0, 8, 1, qualityGroups[2]);
-  setCell(0, 10, 1, others.map(issue => issueLine(issue, item.issues.indexOf(issue))));
+  const linesFor = (issues, category) => issues
+    .filter(issue => (issue.noticeCategory || classifyNoticeCategory(issue.type, `${issue.title}${issue.fact}`)) === category)
+    .map(issue => issueLine(issue, item.issues.indexOf(issue)));
+  const kaitiFive = { kaitiFive: true };
+  setCell(0, 4, 1, linesFor(quality, "主要岗位责任制落实及人员到位履职情况"), kaitiFive);
+  setCell(0, 6, 1, linesFor(quality, "质量行为检查情况"), kaitiFive);
+  setCell(0, 8, 1, linesFor(quality, "实体工程质量情况"), kaitiFive);
+  setCell(0, 10, 1, [...linesFor(quality, "质量其他"), ...others.map(issue => issueLine(issue, item.issues.indexOf(issue)))], kaitiFive);
 
-  const safetyGroups = categorizedNoticeLines(safety, [/体系|人员|责任制|制度/, /防洪|度汛|应急|预案/]);
-  setCell(1, 4, 1, safetyGroups[0]);
-  setCell(1, 6, 1, safetyGroups[2]);
-  setCell(1, 8, 1, safetyGroups[1]);
-  setCell(1, 10, 1, []);
+  setCell(1, 4, 1, linesFor(safety, "安全体系运行情况"), kaitiFive);
+  setCell(1, 6, 1, linesFor(safety, "施工现场管理及安全隐患情况"), kaitiFive);
+  setCell(1, 8, 1, linesFor(safety, "防洪度汛及应急预案情况"), kaitiFive);
+  setCell(1, 10, 1, linesFor(safety, "安全其他"), kaitiFive);
 
   const body = xml.getElementsByTagNameNS(W, "body")[0];
   if (!quality.length && !others.length) {
@@ -1179,7 +1258,7 @@ function saveReviewEdits() {
   const item = inspection();
   $$("[data-issue]").forEach(card => {
     const issue = item.issues.find(x => x.id === card.dataset.issue);
-    ["title","type","level","fact","standard","rectification"].forEach(key => {
+    ["title","type","level","noticeCategory","fact","standard","rectification"].forEach(key => {
       issue[key] = card.querySelector(`[name="${key}"]`).value.trim();
     });
     const options = $$("[data-responsibility-option]:checked", card);
@@ -1214,14 +1293,29 @@ async function startInspectionFromProject(project, date = today()) {
 async function handleAction(action) {
   if (action === "open-search") { state.modal = "search"; render(); setTimeout(() => $("#global-search")?.focus(), 0); }
   if (action === "new-inspection") { state.modal = "new"; render(); }
-  if (action === "new-project") { state.modal = "project-form"; render(); }
+  if (action === "new-project") { state.editingProjectId = null; state.modal = "project-form"; render(); }
+  if (action === "edit-project") {
+    const item = inspection();
+    state.editingProjectId = item?.projectId || state.projectLibrary.find(project => project.name === item?.projectName)?.id || null;
+    state.modal = "project-form";
+    render();
+  }
   if (action === "add-record") { pendingPhotos = []; state.modal = "record"; render(); }
-  if (action === "close-modal") { state.modal = null; render(); }
+  if (action === "close-modal") { state.modal = null; state.editingProjectId = null; render(); }
   if (action === "import-history") { state.modal = "import"; render(); }
   if (action === "import-standard") { state.modal = "standard"; render(); }
   if (action === "back-detail") { state.view = "inspection-detail"; render(); }
   if (action === "back-review") { state.view = "review"; render(); }
   if (action === "print-report") window.print();
+  if (action === "delete-inspection") {
+    const item = inspection();
+    if (!item || !confirm(`确定删除“${item.projectName}”这次检查记录？`)) return;
+    state.inspections = state.inspections.filter(record => record.id !== item.id);
+    state.currentInspectionId = null;
+    await save();
+    setView("inspections");
+    return;
+  }
   if (action === "save-record" || action === "save-record-finish") {
     const remark = $("#record-remark")?.value.trim();
     if (!remark) return toast("请写一句简单备注");
@@ -1332,19 +1426,8 @@ async function handleAction(action) {
 }
 
 document.addEventListener("click", async event => {
-  if (suppressSwipeClick && event.target.closest(".swipe-content")) {
-    event.preventDefault();
-    return;
-  }
-  const deleteInspectionId = event.target.closest("[data-delete-inspection]")?.dataset.deleteInspection;
-  if (deleteInspectionId) {
-    if (!confirm("删除这条检查记录？")) return;
-    state.inspections = state.inspections.filter(item => item.id !== deleteInspectionId);
-    if (state.currentInspectionId === deleteInspectionId) state.currentInspectionId = null;
-    await save();
-    render();
-    return;
-  }
+  const speechTarget = event.target.closest("[data-speech-target]")?.dataset.speechTarget;
+  if (speechTarget) return startSpeechInput(speechTarget);
   const view = event.target.closest("[data-view]")?.dataset.view;
   if (view) return setView(view);
   const action = event.target.closest("[data-action]")?.dataset.action;
@@ -1369,39 +1452,6 @@ document.addEventListener("click", async event => {
   const removeIndex = event.target.closest("[data-remove-pending]")?.dataset.removePending;
   if (removeIndex !== undefined) { pendingPhotos.splice(Number(removeIndex), 1); showPendingPhotos(); }
 });
-
-document.addEventListener("touchstart", event => {
-  const row = event.target.closest(".swipe-row");
-  if (!row || event.touches.length !== 1) return;
-  const touch = event.touches[0];
-  swipeState = { row, startX: touch.clientX, startY: touch.clientY, dx: 0 };
-}, { passive: true });
-
-document.addEventListener("touchmove", event => {
-  if (!swipeState || event.touches.length !== 1) return;
-  const touch = event.touches[0];
-  const dx = touch.clientX - swipeState.startX;
-  const dy = touch.clientY - swipeState.startY;
-  if (Math.abs(dx) <= Math.abs(dy) || dx < 0) return;
-  swipeState.dx = dx;
-  swipeState.row.querySelector(".swipe-content").style.transform = `translateX(${Math.min(76, dx)}px)`;
-}, { passive: true });
-
-document.addEventListener("touchend", () => {
-  if (!swipeState) return;
-  const content = swipeState.row.querySelector(".swipe-content");
-  if (swipeState.dx > 48) {
-    $$(".swipe-row.swiped").forEach(row => row !== swipeState.row && row.classList.remove("swiped"));
-    swipeState.row.classList.add("swiped");
-    content.style.transform = "";
-    suppressSwipeClick = true;
-    setTimeout(() => { suppressSwipeClick = false; }, 450);
-  } else {
-    swipeState.row.classList.remove("swiped");
-    content.style.transform = "";
-  }
-  swipeState = null;
-}, { passive: true });
 
 document.addEventListener("submit", async event => {
   event.preventDefault();
@@ -1461,10 +1511,36 @@ document.addEventListener("submit", async event => {
   }
   if (event.target.id !== "new-form") return;
   const data = Object.fromEntries(new FormData(event.target));
+  if (data.editingProjectId) {
+    const project = state.projectLibrary.find(item => item.id === data.editingProjectId);
+    if (!project) return toast("未找到工程资料");
+    const oldName = project.name;
+    Object.assign(project, {
+      name: data.projectName.trim(), district: data.district.trim(),
+      ownerUnit: data.ownerUnit?.trim() || "", constructionUnit: data.constructionUnit?.trim() || "",
+      supervisionUnit: data.supervisionUnit?.trim() || "", designUnit: data.designUnit?.trim() || "",
+      basicSituation: data.basicSituation?.trim() || ""
+    });
+    state.inspections.filter(item => item.projectId === project.id || item.projectName === oldName).forEach(item => {
+      item.projectId = project.id;
+      item.projectName = project.name;
+      item.district = project.district;
+      ["ownerUnit","constructionUnit","supervisionUnit","designUnit","basicSituation"].forEach(key => item[key] = project[key]);
+      if (item.id === state.currentInspectionId) item.date = data.date;
+    });
+    state.projects = [...new Set(state.projects.map(name => name === oldName ? project.name : name))];
+    state.editingProjectId = null;
+    state.modal = null;
+    await save();
+    render();
+    toast("工程资料已修改");
+    return;
+  }
   const project = {
     id: uid(), name: data.projectName.trim(), district: data.district.trim(),
     ownerUnit: data.ownerUnit?.trim() || "", constructionUnit: data.constructionUnit?.trim() || "",
-    supervisionUnit: data.supervisionUnit?.trim() || "", designUnit: data.designUnit?.trim() || ""
+    supervisionUnit: data.supervisionUnit?.trim() || "", designUnit: data.designUnit?.trim() || "",
+    basicSituation: data.basicSituation?.trim() || ""
   };
   const existingProject = state.projectLibrary.find(item => item.name === project.name);
   const savedProject = existingProject || project;
