@@ -1,10 +1,11 @@
-const CACHE = "shuili-jiancha-v12";
+const CACHE = "shuili-jiancha-v13";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./manifest.webmanifest",
+  "./icons/app-icon.svg",
   "./icons/app-icon-180.png",
   "./icons/app-icon-192.png",
   "./icons/app-icon-512.png",
