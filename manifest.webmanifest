@@ -1,6 +1,6 @@
 {
-  "name": "水利监督检查",
-  "short_name": "监督检查",
+  "name": "娄底水利监督检查",
+  "short_name": "娄底水利",
   "description": "现场拍照、自动整理并生成监督检查通报",
   "id": "./",
   "start_url": "./",
