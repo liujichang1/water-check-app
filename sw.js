@@ -1,4 +1,4 @@
-const CACHE = "shuili-jiancha-v11";
+const CACHE = "shuili-jiancha-v12";
 const ASSETS = [
   "./",
   "./index.html",
