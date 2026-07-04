@@ -194,7 +194,7 @@ function menuCell(view, icon, label, value) {
 }
 
 function meView() {
-  return `<main class="page wx-page"><div class="profile-cell"><img class="profile-logo" src="./icons/app-icon-192.png" alt="娄底水利">
+  return `<main class="page wx-page"><div class="profile-cell"><img class="profile-logo" src="./icons/app-icon.svg" alt="娄底水利">
     <div><h2>娄底水利</h2><p>现场检查与通报整理</p></div></div>
     <div class="wx-group menu-group">${menuCell("project-library","▦","工程库",`${state.projectLibrary.length}个`)}
       ${menuCell("library","▤","历史通报库",`${state.library.length}条`)}${menuCell("standards","§","规范库",`${state.standards.length}份`)}</div>
