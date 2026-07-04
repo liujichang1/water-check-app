@@ -1,10 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#101010"/>
-  <path d="M0 148h512v216H0z" fill="#171717"/>
-  <path d="M98 115h92c18 0 32 14 32 32v218c0 18-14 32-32 32H98c-18 0-32-14-32-32V147c0-18 14-32 32-32z" fill="#24e3df"/>
-  <path d="M322 115h92c18 0 32 14 32 32v218c0 18-14 32-32 32h-92c-18 0-32-14-32-32V147c0-18 14-32 32-32z" fill="#ff2d55"/>
-  <rect x="122" y="83" width="268" height="346" rx="58" fill="#ffffff"/>
-  <path d="M183 184c31 15 53 44 57 79 3 32-8 65-31 94 44-11 84-39 112-83 19-30 29-62 30-96-35 39-77 58-126 57-17 0-32-18-42-51z" fill="#101010"/>
-  <circle cx="205" cy="327" r="18" fill="#24e3df"/>
-  <circle cx="307" cy="327" r="18" fill="#ff2d55"/>
+  <rect width="512" height="512" rx="92" fill="#fff"/>
+  <g fill="none" stroke="#2864a9" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="256" cy="202" rx="170" ry="116"/>
+    <path d="M256 67v270M122 124c45 31 65 78 65 126s-20 78-50 103M390 124c-45 31-65 78-65 126s20 78 50 103"/>
+  </g>
+  <text x="256" y="444" text-anchor="middle" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="62" font-weight="600" fill="#111">娄底水利</text>
 </svg>
